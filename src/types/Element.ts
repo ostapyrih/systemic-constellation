@@ -1,5 +1,4 @@
-// Element.ts
-interface Element {
+export default interface Element {
   id: number;
   name: string;
   icon: string;
@@ -7,5 +6,3 @@ interface Element {
   x: number;
   y: number;
 }
-
-export default Element;

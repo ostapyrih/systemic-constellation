@@ -1,7 +1,5 @@
-type Relation = {
+export default interface Relation {
   from: string;
   to: string;
   type: string;
-};
-
-export default Relation;
+}
