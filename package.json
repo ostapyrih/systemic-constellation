@@ -3,6 +3,7 @@
   "description": "A React application for managing and visualizing systemic constellations.",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://ostapyrih.github.io/systemic-constellation/",
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
