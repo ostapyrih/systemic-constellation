@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import CreateElementModal from "./components/CreateElementModal";
-import ElementTypes from "./types/ElementTypes";
 import Relation from "./types/Relation";
 import Element from "./types/Element";
 import RelationTypes from "./types/RelationTypes";
@@ -8,7 +7,6 @@ import PlusIcon from "./components/PlusIcon";
 import TrashIcon from "./components/TrashIcon";
 import RefreshIcon from "./components/RefreshIcon";
 
-export type ElementTypeKey = keyof typeof ElementTypes;
 export type RelationTypeKey = keyof typeof RelationTypes;
 
 interface MousePosition {
@@ -21,6 +19,17 @@ interface DrawingState {
   drawingFrom: string | null;
   mousePosition: MousePosition;
 }
+
+const AVAILABLE_ICONS = [
+  "wizard.png",
+  "knight.png",
+  "healer.png",
+  "archer.png",
+  "warrior.png",
+  "mage.png",
+  "rogue.png",
+  "priest.png",
+];
 
 const SystemicConstellationsApp = () => {
   const [elements, setElements] = useState<Element[]>([]);
@@ -66,14 +75,14 @@ const SystemicConstellationsApp = () => {
   );
 
   const addElement = useCallback(
-    (name: string, type: ElementTypeKey, color: string) => {
-      if (!name.trim()) return;
+    (name: string, icon: string, color: string) => {
+      if (!name.trim() || !icon) return;
 
       const position = getRandomPosition();
       const newElement: Element = {
         id: Date.now(),
         name: name,
-        type: type,
+        icon: icon,
         color: color,
         ...position,
       };
@@ -206,53 +215,6 @@ const SystemicConstellationsApp = () => {
     }
   }, []);
 
-  const renderElementShape = useCallback((element: Element) => {
-    const size = 40;
-    const halfSize = size / 2;
-    const shapeType = ElementTypes[element.type as ElementTypeKey]?.shape;
-
-    const shapeProps = {
-      fill: element.color,
-    };
-
-    switch (shapeType) {
-      case "square":
-        return (
-          <rect
-            x={-halfSize}
-            y={-halfSize}
-            width={size}
-            height={size}
-            rx="5"
-            {...shapeProps}
-          />
-        );
-      case "triangle":
-        return (
-          <polygon
-            points={`0,${-halfSize} ${halfSize},${halfSize} ${-halfSize},${halfSize}`}
-            {...shapeProps}
-          />
-        );
-      case "star":
-        const spikes = 5;
-        const outerRadius = halfSize;
-        const innerRadius = halfSize / 2;
-        let points = "";
-
-        for (let i = 0; i < spikes * 2; i++) {
-          const radius = i % 2 === 0 ? outerRadius : innerRadius;
-          const angle = (Math.PI / spikes) * i;
-          points += `${radius * Math.sin(angle)},${-radius * Math.cos(angle)} `;
-        }
-
-        return <polygon points={points} {...shapeProps} />;
-      case "circle":
-      default:
-        return <circle r={halfSize} {...shapeProps} />;
-    }
-  }, []);
-
   const renderRelationLine = useCallback(
     (relation: Relation) => {
       const fromElement = elements.find(
@@ -341,8 +303,19 @@ const SystemicConstellationsApp = () => {
                   className="flex items-center justify-between bg-white p-2 mb-1 rounded shadow-sm"
                 >
                   <div className="flex items-center">
+                    <img
+                      src={`/icons/${element.icon}`}
+                      alt={element.name}
+                      className="w-6 h-6 mr-2 object-contain"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        (e.currentTarget
+                          .nextElementSibling as HTMLElement)!.style.display =
+                          "block";
+                      }}
+                    />
                     <div
-                      className="w-3 h-3 rounded-full mr-2"
+                      className="w-6 h-6 rounded-full mr-2 hidden"
                       style={{ backgroundColor: element.color }}
                     />
                     <span className="truncate">{element.name}</span>
@@ -420,24 +393,30 @@ const SystemicConstellationsApp = () => {
                   }
                 }}
               >
-                <svg width="80" height="80" className="pointer-events-none">
-                  <g transform="translate(40,40)">
-                    {renderElementShape(element)}
-                    {element.type === "emotion" && (
-                      <text
-                        y="5"
-                        textAnchor="middle"
-                        className="text-xs"
-                        fill="white"
-                        style={{ pointerEvents: "none" }}
-                      >
-                        {element.name.substring(0, 1)}
-                      </text>
-                    )}
-                  </g>
-                </svg>
-                <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 bg-white px-2 py-1 rounded shadow-sm text-xs whitespace-nowrap">
-                  {element.name}
+                <div className="flex flex-col items-center">
+                  <img
+                    src={`/icons/${element.icon}`}
+                    alt={element.name}
+                    className="w-16 h-16 object-contain pointer-events-none"
+                    style={{
+                      filter: `drop-shadow(2px 2px 4px ${element.color}40)`,
+                    }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      (e.currentTarget
+                        .nextElementSibling as HTMLElement)!.style.display =
+                        "flex";
+                    }}
+                  />
+                  <div
+                    className="w-16 h-16 rounded-full hidden items-center justify-center text-white font-bold pointer-events-none"
+                    style={{ backgroundColor: element.color }}
+                  >
+                    {element.name.substring(0, 2).toUpperCase()}
+                  </div>
+                  <div className="mt-1 bg-white px-2 py-1 rounded shadow-sm text-xs whitespace-nowrap">
+                    {element.name}
+                  </div>
                 </div>
               </div>
             ))}
@@ -460,6 +439,7 @@ const SystemicConstellationsApp = () => {
         <CreateElementModal
           setShowAddModal={setShowAddModal}
           addElement={addElement}
+          availableIcons={AVAILABLE_ICONS}
         />
       )}
     </div>
