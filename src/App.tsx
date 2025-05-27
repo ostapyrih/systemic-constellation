@@ -1,72 +1,134 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import CreateElementModal from "./components/CreateElementModal";
 import ElementTypes from "./types/ElementTypes";
 import Relation from "./types/Relation";
 import Element from "./types/Element";
 import RelationTypes from "./types/RelationTypes";
+import PlusIcon from "./components/PlusIcon";
+import TrashIcon from "./components/TrashIcon";
+import RefreshIcon from "./components/RefreshIcon";
 
 export type ElementTypeKey = keyof typeof ElementTypes;
 export type RelationTypeKey = keyof typeof RelationTypes;
+
+interface MousePosition {
+  x: number;
+  y: number;
+}
+
+interface DrawingState {
+  isDrawing: boolean;
+  drawingFrom: string | null;
+  mousePosition: MousePosition;
+}
 
 const SystemicConstellationsApp = () => {
   const [elements, setElements] = useState<Element[]>([]);
   const [selectedElement, setSelectedElement] = useState<Element | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [notes, setNotes] = useState("");
-  const [isDrawing, setIsDrawing] = useState(false);
   const [relations, setRelations] = useState<Relation[]>([]);
-  const [drawingFrom, setDrawingFrom] = useState<string | null>(null);
   const [relationType, setRelationType] = useState<RelationTypeKey>("neutral");
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+
+  const [drawingState, setDrawingState] = useState<DrawingState>({
+    isDrawing: false,
+    drawingFrom: null,
+    mousePosition: { x: 0, y: 0 },
+  });
+
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const addElement = (name: string, type: ElementTypeKey, color: string) => {
-    if (!name.trim()) return;
+  const getContainerRect = useCallback(() => {
+    return containerRef.current?.getBoundingClientRect();
+  }, []);
 
-    const containerRect = containerRef.current?.getBoundingClientRect();
+  const getRandomPosition = useCallback(() => {
+    const containerRect = getContainerRect();
     const centerX = Number(containerRect?.width) / 2;
     const centerY = Number(containerRect?.height) / 2;
-
     const randomOffset = () => Math.random() * 150 - 75;
 
-    const newElement: Element = {
-      id: Date.now(),
-      name: name,
-      type: type,
-      color: color,
+    return {
       x: centerX + randomOffset(),
       y: centerY + randomOffset(),
     };
+  }, [getContainerRect]);
 
-    setElements([...elements, newElement]);
-    setShowAddModal(false);
-  };
+  const getMousePosition = useCallback(
+    (e: React.MouseEvent): MousePosition => {
+      const containerRect = getContainerRect();
+      return {
+        x: e.clientX - Number(containerRect?.left),
+        y: e.clientY - Number(containerRect?.top),
+      };
+    },
+    [getContainerRect]
+  );
 
-  const deleteElement = (id: number) => {
-    setElements(elements.filter((element) => element.id !== id));
-    setRelations(
-      relations.filter(
-        (relation) => relation.from !== String(id) && relation.to !== String(id)
-      )
-    );
-    if (selectedElement?.id === id) {
-      setSelectedElement(null);
-    }
-  };
+  const addElement = useCallback(
+    (name: string, type: ElementTypeKey, color: string) => {
+      if (!name.trim()) return;
 
-  const startDrawingRelation = (id: string) => {
-    setIsDrawing(true);
-    setDrawingFrom(id);
-  };
+      const position = getRandomPosition();
+      const newElement: Element = {
+        id: Date.now(),
+        name: name,
+        type: type,
+        color: color,
+        ...position,
+      };
 
-  const finishDrawingRelation = (toId: number) => {
-    if (isDrawing && drawingFrom !== String(toId)) {
-      setRelations((prev: Relation[]) => {
+      setElements((prev) => [...prev, newElement]);
+      setShowAddModal(false);
+    },
+    [getRandomPosition]
+  );
+
+  const deleteElement = useCallback(
+    (id: number) => {
+      setElements((prev) => prev.filter((element) => element.id !== id));
+      setRelations((prev) =>
+        prev.filter(
+          (relation) =>
+            relation.from !== String(id) && relation.to !== String(id)
+        )
+      );
+
+      if (selectedElement?.id === id) {
+        setSelectedElement(null);
+      }
+    },
+    [selectedElement]
+  );
+
+  const startDrawingRelation = useCallback((id: string) => {
+    setDrawingState((prev) => ({
+      ...prev,
+      isDrawing: true,
+      drawingFrom: id,
+    }));
+  }, []);
+
+  const finishDrawingRelation = useCallback(
+    (toId: number) => {
+      const { isDrawing, drawingFrom } = drawingState;
+
+      if (!isDrawing || drawingFrom === String(toId)) {
+        setDrawingState((prev) => ({
+          ...prev,
+          isDrawing: false,
+          drawingFrom: null,
+        }));
+        return;
+      }
+
+      setRelations((prev) => {
         const exists = prev.some(
           (r) =>
             (r.from === drawingFrom && r.to === String(toId)) ||
             (r.from === String(toId) && r.to === drawingFrom)
         );
+
         if (exists) {
           return prev.map((r) =>
             (r.from === drawingFrom && r.to === String(toId)) ||
@@ -74,71 +136,84 @@ const SystemicConstellationsApp = () => {
               ? { ...r, type: relationType }
               : r
           );
-        } else {
-          return [
-            ...prev,
-            { from: String(drawingFrom), to: String(toId), type: relationType },
-          ];
         }
+
+        return [
+          ...prev,
+          {
+            from: String(drawingFrom),
+            to: String(toId),
+            type: relationType,
+          },
+        ];
       });
-    }
-    setIsDrawing(false);
-    setDrawingFrom(null);
-  };
 
-  const handleMouseDown = (e: React.MouseEvent, id: number) => {
-    e.stopPropagation();
-    if (e.shiftKey) {
-      const containerRect = containerRef?.current?.getBoundingClientRect();
-      setMousePosition({
-        x: e.clientX - Number(containerRect?.left),
-        y: e.clientY - Number(containerRect?.top),
-      });
-      startDrawingRelation(String(id));
-    } else {
-      setSelectedElement(elements.find((el) => el.id === id) || null);
-    }
-  };
+      setDrawingState((prev) => ({
+        ...prev,
+        isDrawing: false,
+        drawingFrom: null,
+      }));
+    },
+    [drawingState, relationType]
+  );
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (selectedElement !== null) {
-      const containerRect = containerRef.current?.getBoundingClientRect();
-      const x = e.clientX - Number(containerRect?.left);
-      const y = e.clientY - Number(containerRect?.top);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent, id: number) => {
+      e.stopPropagation();
 
-      setElements(
-        elements.map((element) =>
-          element.id === selectedElement.id ? { ...element, x, y } : element
-        )
-      );
-    }
+      if (e.shiftKey) {
+        const mousePosition = getMousePosition(e);
+        setDrawingState((prev) => ({ ...prev, mousePosition }));
+        startDrawingRelation(String(id));
+      } else {
+        const element = elements.find((el) => el.id === id) || null;
+        setSelectedElement(element);
+      }
+    },
+    [elements, getMousePosition, startDrawingRelation]
+  );
 
-    // Track mouse position for drawing lines
-    if (isDrawing) {
-      const containerRect = containerRef.current?.getBoundingClientRect();
-      setMousePosition({
-        x: e.clientX - Number(containerRect?.left),
-        y: e.clientY - Number(containerRect?.top),
-      });
-    }
-  };
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (selectedElement !== null) {
+        const position = getMousePosition(e);
+        setElements((prev) =>
+          prev.map((element) =>
+            element.id === selectedElement.id
+              ? { ...element, ...position }
+              : element
+          )
+        );
+      }
 
-  const handleMouseUp = () => {
+      if (drawingState.isDrawing) {
+        const mousePosition = getMousePosition(e);
+        setDrawingState((prev) => ({ ...prev, mousePosition }));
+      }
+    },
+    [selectedElement, drawingState.isDrawing, getMousePosition]
+  );
+
+  const handleMouseUp = useCallback(() => {
     setSelectedElement(null);
-  };
+  }, []);
 
-  const resetConstellation = () => {
+  const resetConstellation = useCallback(() => {
     if (window.confirm("Ви впевнені, що хочете очистити всі елементи?")) {
       setElements([]);
       setRelations([]);
       setNotes("");
     }
-  };
+  }, []);
 
-  const renderElementShape = (element: Element) => {
+  const renderElementShape = useCallback((element: Element) => {
     const size = 40;
     const halfSize = size / 2;
     const shapeType = ElementTypes[element.type as ElementTypeKey]?.shape;
+
+    const shapeProps = {
+      fill: element.color,
+    };
 
     switch (shapeType) {
       case "square":
@@ -148,15 +223,15 @@ const SystemicConstellationsApp = () => {
             y={-halfSize}
             width={size}
             height={size}
-            fill={element.color}
             rx="5"
+            {...shapeProps}
           />
         );
       case "triangle":
         return (
           <polygon
             points={`0,${-halfSize} ${halfSize},${halfSize} ${-halfSize},${halfSize}`}
-            fill={element.color}
+            {...shapeProps}
           />
         );
       case "star":
@@ -171,51 +246,45 @@ const SystemicConstellationsApp = () => {
           points += `${radius * Math.sin(angle)},${-radius * Math.cos(angle)} `;
         }
 
-        return <polygon points={points} fill={element.color} />;
+        return <polygon points={points} {...shapeProps} />;
       case "circle":
       default:
-        return <circle r={halfSize} fill={element.color} />;
+        return <circle r={halfSize} {...shapeProps} />;
     }
-  };
-
-  useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      setSelectedElement(null);
-    };
-
-    window.addEventListener("mouseup", handleGlobalMouseUp);
-    return () => {
-      window.removeEventListener("mouseup", handleGlobalMouseUp);
-    };
   }, []);
 
-  const renderRelationLine = (relation: Relation) => {
-    const fromElement = elements.find(
-      (e) => String(e.id) === String(relation.from)
-    );
-    const toElement = elements.find(
-      (e) => String(e.id) === String(relation.to)
-    );
+  const renderRelationLine = useCallback(
+    (relation: Relation) => {
+      const fromElement = elements.find(
+        (e) => String(e.id) === String(relation.from)
+      );
+      const toElement = elements.find(
+        (e) => String(e.id) === String(relation.to)
+      );
 
-    if (!fromElement || !toElement) return null;
+      if (!fromElement || !toElement) return null;
 
-    const relationStyle = RelationTypes[relation.type as RelationTypeKey];
+      const relationStyle = RelationTypes[relation.type as RelationTypeKey];
 
-    return (
-      <line
-        key={`${relation.from}-${relation.to}`}
-        x1={fromElement.x}
-        y1={fromElement.y}
-        x2={toElement.x}
-        y2={toElement.y}
-        stroke={"color" in relationStyle ? relationStyle.color : "#000"}
-        strokeWidth={relationStyle.width || 2}
-        strokeDasharray={relationStyle.style === "dashed" ? "5,5" : ""}
-      />
-    );
-  };
+      return (
+        <line
+          key={`${relation.from}-${relation.to}`}
+          x1={fromElement.x}
+          y1={fromElement.y}
+          x2={toElement.x}
+          y2={toElement.y}
+          stroke={"color" in relationStyle ? relationStyle.color : "#000"}
+          strokeWidth={relationStyle.width || 2}
+          strokeDasharray={relationStyle.style === "dashed" ? "5,5" : ""}
+        />
+      );
+    },
+    [elements]
+  );
 
-  const renderDrawingLine = () => {
+  const renderDrawingLine = useCallback(() => {
+    const { isDrawing, drawingFrom, mousePosition } = drawingState;
+
     if (!isDrawing || !drawingFrom) return null;
 
     const fromElement = elements.find((e) => e.id === Number(drawingFrom));
@@ -232,80 +301,37 @@ const SystemicConstellationsApp = () => {
         strokeDasharray="5,5"
       />
     );
-  };
+  }, [drawingState, elements]);
 
-  // Компонент для іконки плюс (+)
-  const PlusIcon = () => (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <line x1="12" y1="5" x2="12" y2="19"></line>
-      <line x1="5" y1="12" x2="19" y2="12"></line>
-    </svg>
-  );
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setSelectedElement(null);
+    };
 
-  // Компонент для іконки оновлення
-  const RefreshIcon = () => (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M23 4v6h-6"></path>
-      <path d="M1 20v-6h6"></path>
-      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
-      <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-    </svg>
-  );
-
-  // Компонент для іконки видалення
-  const TrashIcon = () => (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="3 6 5 6 21 6"></polyline>
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-      <line x1="10" y1="11" x2="10" y2="17"></line>
-      <line x1="14" y1="11" x2="14" y2="17"></line>
-    </svg>
-  );
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
+  }, []);
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
-      <div className="bg-blue-600 text-white p-4 shadow-md">
+      <header className="bg-blue-600 text-white p-4 shadow-md">
         <div className="flex justify-between items-center">
           <h1 className="text-xl font-bold">Системні розстановки</h1>
         </div>
-      </div>
+      </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-64 bg-gray-200 p-4 flex flex-col">
-          <div className="mb-4">
+        <aside className="w-64 bg-gray-200 p-4 flex flex-col">
+          <section className="mb-4">
             <h2 className="font-bold mb-2">Елементи ({elements.length})</h2>
             <button
               onClick={() => setShowAddModal(true)}
               className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded p-2 flex items-center justify-center"
             >
-              <PlusIcon /> <span className="ml-1">Додати елемент</span>
+              <PlusIcon />
+              <span className="ml-1">Додати елемент</span>
             </button>
 
             <div className="mt-2 max-h-40 overflow-y-auto">
@@ -318,7 +344,7 @@ const SystemicConstellationsApp = () => {
                     <div
                       className="w-3 h-3 rounded-full mr-2"
                       style={{ backgroundColor: element.color }}
-                    ></div>
+                    />
                     <span className="truncate">{element.name}</span>
                   </div>
                   <button
@@ -330,9 +356,9 @@ const SystemicConstellationsApp = () => {
                 </div>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="mb-4">
+          <section className="mb-4">
             <h2 className="font-bold mb-2">Зв'язки</h2>
             <div className="bg-white p-2 rounded">
               <select
@@ -353,19 +379,19 @@ const SystemicConstellationsApp = () => {
                 елементі, утримуючи Shift, потім клацніть на другому елементі
               </div>
             </div>
-          </div>
+          </section>
 
           <div className="mt-auto">
             <button
               onClick={resetConstellation}
               className="w-full bg-red-500 hover:bg-red-600 text-white rounded p-2 flex items-center justify-center"
             >
-              <RefreshIcon /> <span className="ml-1">Очистити розстановку</span>
+              <RefreshIcon />
+              <span className="ml-1">Очистити розстановку</span>
             </button>
           </div>
-        </div>
-
-        <div className="flex-1 flex flex-col">
+        </aside>
+        <main className="flex-1 flex flex-col">
           <div
             ref={containerRef}
             className="flex-1 relative border border-gray-300 bg-white"
@@ -389,7 +415,7 @@ const SystemicConstellationsApp = () => {
                 onMouseDown={(e) => handleMouseDown(e, element.id)}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (isDrawing) {
+                  if (drawingState.isDrawing) {
                     finishDrawingRelation(element.id);
                   }
                 }}
@@ -417,7 +443,7 @@ const SystemicConstellationsApp = () => {
             ))}
           </div>
 
-          <div className="bg-gray-200 p-4">
+          <section className="bg-gray-200 p-4">
             <div className="mb-2 font-bold">Нотатки</div>
             <textarea
               className="w-full p-2 rounded border"
@@ -425,10 +451,11 @@ const SystemicConstellationsApp = () => {
               rows={3}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-            ></textarea>
-          </div>
-        </div>
+            />
+          </section>
+        </main>
       </div>
+
       {showAddModal && (
         <CreateElementModal
           setShowAddModal={setShowAddModal}
