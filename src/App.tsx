@@ -5,6 +5,9 @@ import Relation from "./types/Relation";
 import Element from "./types/Element";
 import RelationTypes from "./types/RelationTypes";
 
+export type ElementTypeKey = keyof typeof ElementTypes;
+export type RelationTypeKey = keyof typeof RelationTypes;
+
 const SystemicConstellationsApp = () => {
   const [elements, setElements] = useState<Element[]>([]);
   const [selectedElement, setSelectedElement] = useState<Element | null>(null);
@@ -13,11 +16,11 @@ const SystemicConstellationsApp = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [relations, setRelations] = useState<Relation[]>([]);
   const [drawingFrom, setDrawingFrom] = useState<string | null>(null);
-  const [relationType, setRelationType] = useState("neutral");
+  const [relationType, setRelationType] = useState<RelationTypeKey>("neutral");
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const addElement = (name: string, type: string, color: string) => {
+  const addElement = (name: string, type: ElementTypeKey, color: string) => {
     if (!name.trim()) return;
 
     const containerRect = containerRef.current?.getBoundingClientRect();
@@ -26,7 +29,7 @@ const SystemicConstellationsApp = () => {
 
     const randomOffset = () => Math.random() * 150 - 75;
 
-    const newElement = {
+    const newElement: Element = {
       id: Date.now(),
       name: name,
       type: type,
@@ -42,7 +45,9 @@ const SystemicConstellationsApp = () => {
   const deleteElement = (id: number) => {
     setElements(elements.filter((element) => element.id !== id));
     setRelations(
-      relations.filter((relation) => relation.from !== String(id) && relation.to !== String(id))
+      relations.filter(
+        (relation) => relation.from !== String(id) && relation.to !== String(id)
+      )
     );
     if (selectedElement?.id === id) {
       setSelectedElement(null);
@@ -70,7 +75,10 @@ const SystemicConstellationsApp = () => {
               : r
           );
         } else {
-          return [...prev, { from: String(drawingFrom), to: String(toId), type: relationType }];
+          return [
+            ...prev,
+            { from: String(drawingFrom), to: String(toId), type: relationType },
+          ];
         }
       });
     }
@@ -130,7 +138,7 @@ const SystemicConstellationsApp = () => {
   const renderElementShape = (element: Element) => {
     const size = 40;
     const halfSize = size / 2;
-    const shapeType = ElementTypes[element.type].shape;
+    const shapeType = ElementTypes[element.type as ElementTypeKey]?.shape;
 
     switch (shapeType) {
       case "square":
@@ -182,12 +190,16 @@ const SystemicConstellationsApp = () => {
   }, []);
 
   const renderRelationLine = (relation: Relation) => {
-    const fromElement = elements.find((e) => String(e.id) === String(relation.from));
-    const toElement = elements.find((e) => String(e.id) === String(relation.to));
+    const fromElement = elements.find(
+      (e) => String(e.id) === String(relation.from)
+    );
+    const toElement = elements.find(
+      (e) => String(e.id) === String(relation.to)
+    );
 
     if (!fromElement || !toElement) return null;
 
-    const relationStyle = RelationTypes[relation.type];
+    const relationStyle = RelationTypes[relation.type as RelationTypeKey];
 
     return (
       <line
@@ -196,7 +208,7 @@ const SystemicConstellationsApp = () => {
         y1={fromElement.y}
         x2={toElement.x}
         y2={toElement.y}
-        stroke={relationStyle.color || "#000"}
+        stroke={"color" in relationStyle ? relationStyle.color : "#000"}
         strokeWidth={relationStyle.width || 2}
         strokeDasharray={relationStyle.style === "dashed" ? "5,5" : ""}
       />
@@ -325,7 +337,9 @@ const SystemicConstellationsApp = () => {
             <div className="bg-white p-2 rounded">
               <select
                 value={relationType}
-                onChange={(e) => setRelationType(e.target.value)}
+                onChange={(e) =>
+                  setRelationType(e.target.value as RelationTypeKey)
+                }
                 className="w-full p-1 border rounded"
               >
                 {Object.entries(RelationTypes).map(([value, { label }]) => (
